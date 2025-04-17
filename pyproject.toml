@@ -1,0 +1,24 @@
+[project]
+name = "cov-token-demo-cli-app"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Pulkit Chahar", email = "pulkitchahar91@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "jsonschema>=4.23.0",
+    "pycofhe",
+    "web3>=7.10.0",
+]
+
+[project.scripts]
+cov-token-demo-cli-app = "cov_token_demo_cli_app:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+pycofhe = { path = "artifacts/pycofhe_dist/pycofhe-0.1.0-cp311-cp311-linux_x86_64.whl" }

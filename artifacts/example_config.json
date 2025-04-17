@@ -1,0 +1,10 @@
+{
+    "provider_uri": "xxxxxx",
+    "contract_address": "0xd6086278D1020594edcfDBf07EdF6Ac3462ba92A",
+    "contract_abi_file_path": "artifacts/abi.json",
+    "private_key": "xx",
+    "owner_account_private_key": "xx",
+    "sender_account_private_key": "xx",
+    "recipient_account_private_key": "xx",
+    "cert_path": "artifacts/server.pem"
+}

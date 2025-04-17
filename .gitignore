@@ -1,0 +1,16 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+artifacts/config.json
+artifacts/config_sender.json
+artifacts/config_rec.json
+rsa_private_key.txt
+rsa_public_key.txt
