@@ -46,6 +46,32 @@
     "type": "event"
   },
   {
+    "inputs": [],
+    "name": "ACCEPTED_TOKEN",
+    "outputs": [
+      {
+        "internalType": "contract IERC20",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "TOKEN_CONTRACT",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "address",
@@ -85,6 +111,19 @@
   },
   {
     "inputs": [],
+    "name": "eth_to_cov_token_ratio",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "getBalance",
     "outputs": [
       {
@@ -117,12 +156,38 @@
   },
   {
     "inputs": [],
-    "name": "getMintingInProgress",
+    "name": "getComputing",
     "outputs": [
       {
         "internalType": "bool",
         "name": "",
         "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getEthToCOVTokenRatio",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getOVTokenToCOVTokenRatio",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -206,38 +271,6 @@
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "getTransferInProgress",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "user",
-        "type": "address"
-      }
-    ],
-    "name": "getTransferInProgressOf",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
         "internalType": "address",
@@ -298,6 +331,42 @@
   {
     "inputs": [
       {
+        "internalType": "address",
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "mintFromEth",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "mintFromOVToken",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "CRTT.RequestID",
         "name": "request_id",
         "type": "uint128"
@@ -306,6 +375,19 @@
     "name": "mintPaymentCallback",
     "outputs": [],
     "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "ov_token_to_cov_token_ratio",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -378,6 +460,30 @@
         "internalType": "address payable",
         "name": "from",
         "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "CRTT.RequestID",
+        "name": "",
+        "type": "uint128"
+      }
+    ],
+    "name": "pending_unwrap_to_eth_requests",
+    "outputs": [
+      {
+        "internalType": "address payable",
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -542,6 +648,19 @@
   {
     "inputs": [
       {
+        "internalType": "bool",
+        "name": "_computing",
+        "type": "bool"
+      }
+    ],
+    "name": "setComputing",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "user",
         "type": "address"
@@ -560,12 +679,25 @@
   {
     "inputs": [
       {
-        "internalType": "bool",
-        "name": "minting_",
-        "type": "bool"
+        "internalType": "uint256",
+        "name": "ratio",
+        "type": "uint256"
       }
     ],
-    "name": "setMinting",
+    "name": "setEthToCOVTokenRatio",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "ratio",
+        "type": "uint256"
+      }
+    ],
+    "name": "setOVTokenToCOVTokenRatio",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -615,24 +747,6 @@
       }
     ],
     "name": "setTotalSupply",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "user",
-        "type": "address"
-      },
-      {
-        "internalType": "bool",
-        "name": "transfer_in_progress_",
-        "type": "bool"
-      }
-    ],
-    "name": "setTransferInProgress",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -732,6 +846,72 @@
     "name": "transferOwnership",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "unwrapFromCOVTokenForEth",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "enum CRTT.ResponseStatus",
+            "name": "status",
+            "type": "uint8"
+          },
+          {
+            "internalType": "CRTT.RequestID",
+            "name": "request_id",
+            "type": "uint128"
+          },
+          {
+            "internalType": "bool",
+            "name": "success",
+            "type": "bool"
+          },
+          {
+            "internalType": "CRTT.EUint32",
+            "name": "sender_balance",
+            "type": "uint128"
+          },
+          {
+            "internalType": "CRTT.EUint32",
+            "name": "receiver_balance",
+            "type": "uint128"
+          }
+        ],
+        "internalType": "struct CRTT.ConfidentialCoinResponse",
+        "name": "res",
+        "type": "tuple"
+      }
+    ],
+    "name": "unwrapToEthCallback",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "CRTT.RequestID",
+        "name": "request_id",
+        "type": "uint128"
+      }
+    ],
+    "name": "unwrapToEthPaymentCallback",
+    "outputs": [],
+    "stateMutability": "payable",
     "type": "function"
   },
   {

@@ -1,7 +1,10 @@
 {
     "provider_uri": "xxxxxx",
-    "contract_address": "0xd6086278D1020594edcfDBf07EdF6Ac3462ba92A",
+    "contract_address": "0x22EC9A16c02e75d12042D9B72f6Bff3305B505Ad",
+    "ov_token_contract_address": "0xAf91c2de752e73F5eEe7ebe597bAd326986D818b",
+    "openvector_relayer_endpoint_url": "https://openvector.cofhe.dev:8001/api/v1",
     "contract_abi_file_path": "artifacts/abi.json",
+    "ov_token_contract_abi_file_path": "artifacts/abi_ov_token.json",
     "private_key": "xx",
     "owner_account_private_key": "xx",
     "sender_account_private_key": "xx",

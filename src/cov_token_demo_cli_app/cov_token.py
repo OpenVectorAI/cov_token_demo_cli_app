@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from base64 import b64decode
+from base64 import b64decode, b64encode
 from dataclasses import dataclass
 from enum import Enum
 import json
@@ -16,13 +16,20 @@ from web3.types import Wei
 from web3.contract import Contract
 
 from pycofhe.network import (
-    NodeType,
-    NodeDetails,
-    CryptoSystemType,
-    CryptoSystemDetails,
-    ReencryptorType,
-    ReencryptorDetails,
     NetworkDetails,
+    ServiceType,
+    ProtocolVersion,
+    Request,
+    ResponseStatus,
+    Response,
+    SetupNodeRequestType,
+    SetupNodeRequest,
+    SetupNodeResponseStatus,
+    SetupNodeResponse,
+    NetworkDetailsRequestType,
+    NetworkDetailsRequest,
+    NetworkDetailsResponseStatus,
+    NetworkDetailsResponse,
     make_cpu_cryptosystem_client_node,
     CPUCryptoSystemClientNode,
     encrypt_bit as encrypt_single,
@@ -76,7 +83,7 @@ REGISTER_KEY_FUNC_PAYMENT = (
 
 
 def set_default_account(w3: Web3, private_key: str) -> None:
-    w3.eth.default_account = Account.from_key(private_key)
+    w3.eth.default_account = Account.from_key(private_key).address
 
 
 first_time = True
@@ -102,7 +109,10 @@ def set_middleware_and_default_account(w3: Web3, s_private_key: str) -> None:
 class Config:
     provider_uri: str
     contract_address: str
+    ov_token_contract_address: str
+    openvector_relayer_endpoint_url: str
     contract_abi_file_path: str
+    ov_token_contract_abi_file_path: str
     cert_path: str
     private_key: str = ""
     rsa_private_key_path: str = ""
@@ -127,7 +137,10 @@ config_schema = {
     "properties": {
         "provider_uri": {"type": "string"},
         "contract_address": {"type": "string"},
+        "ov_token_contract_address": {"type": "string"},
+        "openvector_relayer_endpoint_url": {"type": "string"},
         "contract_abi_file_path": {"type": "string"},
+        "ov_token_contract_abi_file_path": {"type": "string"},
         "cert_path": {"type": "string"},
         "private_key": {"type": "string"},
         "rsa_private_key_path": {"type": "string"},
@@ -138,7 +151,10 @@ config_schema = {
     "required": [
         "provider_uri",
         "contract_address",
+        "ov_token_contract_address",
+        "openvector_relayer_endpoint_url",
         "contract_abi_file_path",
+        "ov_token_contract_abi_file_path",
         "cert_path",
     ],
 }
@@ -160,7 +176,10 @@ def load_config(config_path: str, mode: Mode) -> Config:
         config = Config(
             config["provider_uri"],
             config["contract_address"],
+            config["ov_token_contract_address"],
+            config["openvector_relayer_endpoint_url"],
             config["contract_abi_file_path"],
+            config["ov_token_contract_abi_file_path"],
             config["cert_path"],
             config.get("private_key", ""),
             config.get("rsa_private_key_path", ""),
@@ -193,54 +212,83 @@ def load_config(config_path: str, mode: Mode) -> Config:
         raise
 
 
-def get_latest_key():
+def get_network_details(relayer_url: str) -> NetworkDetails:
     try:
-        res = requests.get(
-            "http://openvector_coprocessor.cofhe.dev:8000/network_details"
+        network_details_req = NetworkDetailsRequest(NetworkDetailsRequestType.GET, b"")
+        setup_node_req = SetupNodeRequest(
+            SetupNodeRequestType.NetworkDetailsRequest,
+            network_details_req.to_string(),
         )
+        req = Request(
+            ProtocolVersion.V1,
+            ServiceType.SETUP_REQUEST,
+            setup_node_req.to_string(),
+        )
+        data = b64encode(req.to_string()).decode("utf-8")
+        rpc_req = {"data": data}
+        res = requests.post(
+            url=f"{relayer_url}/openvector/rpc/", data=json.dumps(rpc_req)
+        )
+
         if res.status_code == 200:
             data = res.json()
-            return data["network_encryption_key"]
+            if not isinstance(data, dict):
+                raise ValueError("Invalid response from server")
+            if "status" not in data or "data" not in data:
+                raise ValueError("Invalid response from server")
+            if not isinstance(data["status"], int):
+                raise ValueError("Invalid status code in response")
+            if not isinstance(data["data"], str):
+                raise ValueError("Invalid data in response")
+            if data["status"] == 200:
+                response = Response.from_string(
+                    b64decode(data["data"]),
+                )
+                if response.status != ResponseStatus.OK:
+                    raise ValueError(
+                        f"Failed to fetch network details, status code: {response.status}"
+                    )
+                setup_res = SetupNodeResponse.from_string(
+                    response.data,
+                )
+                if setup_res.status != SetupNodeResponseStatus.OK:
+                    raise ValueError(
+                        f"Failed to fetch network details, status code: {setup_res.status}"
+                    )
+                network_details_response = NetworkDetailsResponse.from_string(
+                    setup_res.data,
+                )
+                if network_details_response.status != NetworkDetailsResponseStatus.OK:
+                    raise ValueError(
+                        f"Failed to fetch network details, status code: {network_details_response.status}"
+                    )
+                return NetworkDetails.from_string(
+                    network_details_response.data,
+                )
+            else:
+                raise ValueError(
+                    f"Failed to fetch network details, status code: {res.status_code}"
+                )
         else:
             raise ValueError(
-                f"Failed to fetch network encryption key, status code: {res.status_code}"
+                f"Failed to fetch network details, status code: {res.status_code}"
             )
-    except requests.RequestException as e:
-        print(f"Error fetching network encryption key: {e}")
-        raise
-    except KeyError:
-        print("Network encryption key not found in response")
+    except Exception as e:
+        print(f"Failed to fetch network details: {e}")
         raise
 
 
-def get_cpu_cryptosystem_client_node(cert_path: str) -> CPUCryptoSystemClientNode:
-    network_encryption_key_bytes = b64decode(
-        get_latest_key(),
-    )
-    self_node = NodeDetails(
-        "127.0.0.1",
-        "4478",
-        NodeType.CLIENT_NODE,
-    )
-    cryptosystem_details = CryptoSystemDetails(
-        CryptoSystemType.CoFHE_CPU, network_encryption_key_bytes, 128, 128, 2, 3
-    )
-    nodes: list[NodeDetails] = []
-    reencryptor = ReencryptorDetails(ReencryptorType.RSA, 2048)
-    nd = NetworkDetails(
-        self_node,
-        nodes,
-        cryptosystem_details,
-        [],
-        reencryptor,
-    )
+def get_cpu_cryptosystem_client_node(
+    url: str, cert_path: str
+) -> CPUCryptoSystemClientNode:
+    nd = get_network_details(url)
     return make_cpu_cryptosystem_client_node(nd, cert_path)
 
 
 def setup(
     config_path: str,
     mode: Mode,
-) -> Tuple[Web3, CPUCryptoSystemClientNode, Contract, str, str]:
+) -> Tuple[Web3, CPUCryptoSystemClientNode, Contract, Contract, str, str]:
     print_in_test_mode("Setting up", mode)
     print_in_test_mode("Loading config file", mode)
     config = load_config(config_path, mode)
@@ -263,7 +311,15 @@ def setup(
         address=config.contract_address,  # type: ignore
         abi=json.load(open(config.contract_abi_file_path, "r")),
     )
+    print(
+        f"Loading OV token contract at {config.ov_token_contract_address} and ABI as per given JSON file"
+    )
+    ov_token_contract = w3.eth.contract(
+        address=config.ov_token_contract_address,  # type: ignore
+        abi=json.load(open(config.ov_token_contract_abi_file_path, "r")),
+    )
     cn = get_cpu_cryptosystem_client_node(
+        config.openvector_relayer_endpoint_url,
         config.cert_path,
     )
     if mode == Mode.CLI_APP:
@@ -273,6 +329,7 @@ def setup(
         w3,
         cn,
         contract,
+        ov_token_contract,
         (
             config.private_key
             if mode == Mode.CLI_APP
@@ -280,6 +337,152 @@ def setup(
         ),
         config.recipient_account_private_key if mode == Mode.TEST else "",
     )
+
+
+def submit_ov_token_mint_request(
+    w3: Web3,
+    ov_token_contract: Contract,
+    sender: str,
+    recipient: str,
+    amount: int,
+    first_call: bool = True,
+    mode: Mode = Mode.CLI_APP,
+) -> None:
+    if first_call:
+        print(f"Submitting OV token mint request for {amount} to {recipient}")
+    try:
+        tx_hash = ov_token_contract.functions.mint(recipient, amount).transact(
+            {"from": sender}
+        )
+        sleep_after_transcation()
+        print("OV token mint request submitted")
+        print(f"Transaction hash: 0x{tx_hash.hex()}")
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        if receipt["status"] == 1:
+            print("Transaction successful")
+        else:
+            print("Transaction failed")
+            raise ValueError("Transaction failed")
+    except Exception as e:
+        sleep_after_transaction_failure()
+        print(f"Failed to submit OV token mint request: {e}")
+        user_input = input("Do you want to try again? (y/n): ")
+        if user_input.lower() != "n":
+            print("Retrying OV token mint request")
+            submit_ov_token_mint_request(
+                w3, ov_token_contract, sender, recipient, amount, False
+            )
+        else:
+            print("OV token mint request cancelled")
+            return
+
+
+def submit_ov_token_approve_request(
+    w3: Web3,
+    ov_token_contract: Contract,
+    sender: str,
+    spender: str,
+    amount: int,
+    first_call: bool = True,
+    mode: Mode = Mode.CLI_APP,
+) -> None:
+    if first_call:
+        print(f"Submitting OV token approve request for {amount} to {spender}")
+    try:
+        tx_hash = ov_token_contract.functions.approve(spender, amount).transact(
+            {"from": sender}
+        )
+        sleep_after_transcation()
+        print("OV token approve request submitted")
+        print(f"Transaction hash: 0x{tx_hash.hex()}")
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        if receipt["status"] == 1:
+            print("Transaction successful")
+        else:
+            print("Transaction failed")
+            raise ValueError("Transaction failed")
+    except Exception as e:
+        sleep_after_transaction_failure()
+        print(f"Failed to submit OV token approve request: {e}")
+        user_input = input("Do you want to try again? (y/n): ")
+        if user_input.lower() != "n":
+            print("Retrying OV token approve request")
+            submit_ov_token_approve_request(
+                w3, ov_token_contract, sender, spender, amount, False
+            )
+        else:
+            print("OV token approve request cancelled")
+            return
+
+
+def get_ov_token_balance(
+    w3: Web3,
+    ov_token_contract: Contract,
+    account: str,
+    first_call: bool = True,
+    mode: Mode = Mode.CLI_APP,
+) -> int:
+    if first_call:
+        print(f"Getting OV token balance for {account}")
+
+    try:
+        balance = ov_token_contract.functions.balanceOf(account).call()
+        print(f"OV token balance: {balance}")
+        return balance
+    except Exception as e:
+        sleep_after_transaction_failure()
+        print(f"Failed to get OV token balance: {e}")
+        user_input = input("Do you want to try again? (y/n): ")
+        if user_input.lower() != "n":
+            print("Retrying OV token balance fetch")
+            return get_ov_token_balance(w3, ov_token_contract, account, False)
+        else:
+            print("OV token balance fetch cancelled")
+            return -1
+
+
+def get_eth_balance(
+    w3: Web3,
+    account: str,
+    first_call: bool = True,
+    mode: Mode = Mode.CLI_APP,
+) -> int:
+    if first_call:
+        print(f"Getting ETH balance for {account}")
+
+    try:
+        balance = w3.eth.get_balance(account)
+        print(f"ETH balance: {balance}")
+        return balance
+    except Exception as e:
+        sleep_after_transaction_failure()
+        print(f"Failed to get ETH balance: {e}")
+        user_input = input("Do you want to try again? (y/n): ")
+        if user_input.lower() != "n":
+            print("Retrying ETH balance fetch")
+            return get_eth_balance(w3, account, False)
+        else:
+            print("ETH balance fetch cancelled")
+            return -1
+
+
+def get_conversion_rate(
+    contract: Contract,
+) -> Tuple[int, int]:
+    try:
+        ov_conversion_rate = contract.functions.getOVTokenToCOVTokenRatio().call()
+        eth_conversion_rate = contract.functions.getEthToCOVTokenRatio().call()
+        return ov_conversion_rate, eth_conversion_rate
+    except Exception as e:
+        sleep_after_transaction_failure()
+        print(f"Failed to get conversion rate: {e}")
+        user_input = input("Do you want to try again? (y/n): ")
+        if user_input.lower() != "n":
+            print("Retrying conversion rate fetch")
+            return get_conversion_rate(contract)
+        else:
+            print("Conversion rate fetch cancelled")
+            return -1, -1
 
 
 def submit_mint_request(
@@ -322,6 +525,82 @@ def submit_mint_request(
             submit_mint_request(w3, client, contract, amount, sender, recipient, False)
         else:
             print("Mint request cancelled")
+            return
+
+
+def submit_mint_with_ov_token_request(
+    w3: Web3,
+    contract: Contract,
+    ov_token_contract: Contract,
+    amount: int,
+    sender: str,
+    recipient: str,
+    first_call: bool = True,
+    mode: Mode = Mode.CLI_APP,
+) -> None:
+    if first_call:
+        print(f"Submitting mint request using OV token for {amount} to {recipient}")
+    try:
+        tx_hash = contract.functions.mintFromOVToken(recipient, amount).transact(
+            {"from": sender, "value": Wei(MINT_FUNC_PAYMENT)}
+        )
+        sleep_after_transcation()
+        print("Mint request using OV token submitted")
+        print(f"Transaction hash: 0x{tx_hash.hex()}")
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        if receipt["status"] == 1:
+            print("Transaction successful")
+        else:
+            print("Transaction failed")
+            raise ValueError("Transaction failed")
+    except Exception as e:
+        sleep_after_transaction_failure()
+        print(f"Failed to submit mint request using OV token: {e}")
+        user_input = input("Do you want to try again? (y/n): ")
+        if user_input.lower() != "n":
+            print("Retrying mint request using OV token")
+            submit_mint_with_ov_token_request(
+                w3, contract, ov_token_contract, amount, sender, recipient, False
+            )
+        else:
+            print("Mint request using OV token cancelled")
+            return
+
+
+def submit_mint_with_eth_request(
+    w3: Web3,
+    contract: Contract,
+    amount: int,
+    sender: str,
+    recipient: str,
+    conversion_rate: int,
+    first_call: bool = True,
+    mode: Mode = Mode.CLI_APP,
+) -> None:
+    if first_call:
+        print(f"Submitting mint request using ETH for {amount} to {recipient}")
+    try:
+        tx_hash = contract.functions.mintFromEth(recipient, amount).transact(
+            {"from": sender, "value": Wei(MINT_FUNC_PAYMENT + amount * conversion_rate)}
+        )
+        sleep_after_transcation()
+        print("Mint request using ETH submitted")
+        print(f"Transaction hash: 0x{tx_hash.hex()}")
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        if receipt["status"] == 1:
+            print("Transaction successful")
+        else:
+            print("Transaction failed")
+            raise ValueError("Transaction failed")
+    except Exception as e:
+        sleep_after_transaction_failure()
+        print(f"Failed to submit mint request using ETH: {e}")
+        user_input = input("Do you want to try again? (y/n): ")
+        if user_input.lower() != "n":
+            print("Retrying mint request using ETH")
+            submit_mint_with_eth_request(w3, contract, amount, sender, recipient, False)
+        else:
+            print("Mint request using ETH cancelled")
             return
 
 
@@ -680,8 +959,8 @@ def test_transfer(
 
 def test(config_path: str):
     print("Running test")
-    w3, client, contract, sender_priv_key, recipient_priv_key = setup(
-        config_path, Mode.TEST
+    w3, client, contract, ov_token_contract, sender_priv_key, recipient_priv_key = (
+        setup(config_path, Mode.TEST)
     )
     sender_key_pair = client.reencryptor.generate_serialized_key_pair()
     rec_key_pair = client.reencryptor.generate_serialized_key_pair()
@@ -758,7 +1037,9 @@ def load_key(priv_key_file: str, pub_key_file: str) -> Tuple[bytes, bytes]:
 
 def cli_app(config_path: str):
     print("Running CLI app")
-    w3, client, contract, priv_key, _ = setup(config_path, Mode.CLI_APP)
+    w3, client, contract, ov_token_contract, priv_key, _ = setup(
+        config_path, Mode.CLI_APP
+    )
     set_middleware_and_default_account(w3, priv_key)
     account = Account.from_key(priv_key)
     address = account.address
@@ -773,6 +1054,9 @@ def cli_app(config_path: str):
         print(
             "Reencryption keys not found. Please use the register option to generate and register keys."
         )
+    conversion_rate = get_conversion_rate(contract)
+    print(f"OV token conversion rate: {conversion_rate[0]}")
+    print(f"ETH conversion rate: {conversion_rate[1]}")
 
     while True:
         print("\nMenu:")
@@ -780,7 +1064,10 @@ def cli_app(config_path: str):
         print("1. Mint")
         print("2. Transfer")
         print("3. Fetch balance")
-        print("4. Exit")
+        print("4. OV Token Options")
+        print("5. Fetch eth balance")
+        print("6. Fetch network details")
+        print("7. Exit")
         choice = input("Enter your choice: ")
         print("")
         if choice == "0":
@@ -793,10 +1080,48 @@ def cli_app(config_path: str):
                 w3, contract, address, rsa_pub_key, True, Mode.CLI_APP
             )
         elif choice == "1":
+            print("\nMint Menu:")
+            print("0. Mint for free")
+            print("1. Mint with OV token")
+            print("2. Mint with ETH")
+            mint_choice = input("Enter your choice: ")
             amount = int(input("Enter amount to mint: "))
-            submit_mint_request(
-                w3, client, contract, amount, address, address, True, Mode.CLI_APP
-            )
+            if mint_choice == "0":
+                submit_mint_request(
+                    w3, client, contract, amount, address, address, True, Mode.CLI_APP
+                )
+            elif mint_choice == "1":
+                print(f"OV Token conversion rate: {conversion_rate[0]}")
+                print("Make sure you have approved the OV token contract")
+                submit_mint_with_ov_token_request(
+                    w3,
+                    contract,
+                    ov_token_contract,
+                    amount,
+                    address,
+                    address,
+                    True,
+                    Mode.CLI_APP,
+                )
+            elif mint_choice == "2":
+                print(f"ETH conversion rate: {conversion_rate[1]}")
+                print(
+                    "Make sure you have enough ETH in your account to pay for the transaction"
+                )
+                submit_mint_with_eth_request(
+                    w3,
+                    contract,
+                    amount,
+                    address,
+                    address,
+                    conversion_rate[1],
+                    True,
+                    Mode.CLI_APP,
+                )
+            else:
+                print("Invalid choice")
+                print("Please try again")
+                continue
         elif choice == "2":
             recipient = input("Enter recipient address: ")
             amount = int(input("Enter amount to transfer: "))
@@ -820,7 +1145,46 @@ def cli_app(config_path: str):
             )
             print(f"Fetched balance: {balance}")
         elif choice == "4":
-            print("Exiting")
+            print("\nOV Token Menu:")
+            print("0. Mint OV Token")
+            print("1. Approve OV Token")
+            print("2. Fetch OV Token Balance")
+            ov_token_choice = input("Enter your choice: ")
+            if ov_token_choice == "0":
+                amount = int(input("Enter amount to mint: "))
+                submit_ov_token_mint_request(
+                    w3,
+                    ov_token_contract,
+                    address,
+                    address,
+                    amount,
+                    True,
+                    Mode.CLI_APP,
+                )
+            elif ov_token_choice == "1":
+                amount = int(input("Enter amount to approve: "))
+                submit_ov_token_approve_request(
+                    w3, ov_token_contract, address, config.contract_address , amount, True, Mode.CLI_APP
+                )
+            elif ov_token_choice == "2":
+                balance = get_ov_token_balance(
+                    w3, ov_token_contract, address, True, Mode.CLI_APP
+                )
+                print(f"OV Token balance: {balance}")
+            else:
+                print("Invalid choice")
+                print("Please try again")
+                continue
+        elif choice == "5":
+            print("Fetching ETH balance...")
+            balance = get_eth_balance(w3, address, True, Mode.CLI_APP)
+            print(f"Fetched ETH balance: {balance}")
+        elif choice == "6":
+            print("Fetching network details...")
+            nd = get_network_details(config.openvector_relayer_endpoint_url)
+            print(f"Network details: {nd}")
+        elif choice == "7":
+            print("Exiting...")
             break
         else:
             print("Invalid choice")

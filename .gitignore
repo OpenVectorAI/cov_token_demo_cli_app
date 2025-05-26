@@ -12,5 +12,6 @@ wheels/
 artifacts/config.json
 artifacts/config_sender.json
 artifacts/config_rec.json
+artifacts/config_local_sender.json
 rsa_private_key.txt
 rsa_public_key.txt
