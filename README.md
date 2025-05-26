@@ -2,6 +2,10 @@
 
 This python module implements the demo CLI app for the COVToken project which uses OpenVector Coprocessor to do confidential computing. This app interacts COVToken contract deployed at `0x22EC9A16c02e75d12042D9B72f6Bff3305B505Ad` on `Base Sepolia`, the contract implements a confidential/encrypted stable coin/token.
 
+>[!Warning]
+>This repo is archived. Please see the new example at  
+>[pycofhe/examples/cov_token_demo_cli_app](https://github.com/OpenVectorAI/pycofhe/tree/main/examples/cov_token_demo_cli_app)
+
 ## Usage
 
 ### Prerequisites
